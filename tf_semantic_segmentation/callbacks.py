@@ -5,6 +5,49 @@ import numpy as np
 import tensorflow as tf
 import wandb
 import imageio
+import time
+from tensorflow.keras import backend as K
+
+
+def get_time_diff_str(start, end, period=1):
+    diff = int((end - start) / period) if period != 0 else int((end - start))
+    s = diff % 60
+    m = diff // 60
+    h = diff // 3600
+    return "%dh %dm %ds" % (h, m, s)
+
+class TimingCallback(tf.keras.callbacks.Callback):
+    """ Calculates the average time per batch """
+
+    def __init__(self, batch_size: int, total: int, log_interval: int = 10):
+        super(TimingCallback, self).__init__()
+        self.start_time = time.time()
+        self.times = []
+        self.batch_size = batch_size
+        self.total = total
+        self.log_interval = log_interval
+    
+    def on_batch_end(self, batch, logs={}):
+        self.times.append(time.time() - self.batch_start_time)
+
+        if len(self.times) % self.log_interval == 0:
+            log_times = self.times[-self.log_interval:]
+            sec_per_batch = np.mean(log_times)
+            images_per_sec = (self.batch_size * self.log_interval) / sum(log_times)
+            logger.info("[TimingCallback] Batch %d: %.3f s/batch %.1f images/s" % (batch, sec_per_batch, images_per_sec))
+    
+    def on_epoch_end(self, epoch, logs={}):
+        total_time = sum(self.times)
+        sec_per_batch = np.mean(self.times)
+        images_per_sec = self.total / total_time
+
+        logger.info("[TimingCallback] Epoch %d: %.3f s/batch %.1f images/s" % (epoch, sec_per_batch, images_per_sec))
+        self.times = []
+        self.start_time = time.time()
+
+    def on_batch_begin(self, batch, logs={}):
+        self.batch_start_time = time.time()
+    
 
 
 class PredictionCallback(tf.keras.callbacks.Callback):
@@ -19,6 +62,7 @@ class PredictionCallback(tf.keras.callbacks.Callback):
         self._model = model
         self.num_classes = self._model.output.shape.as_list()[-1] if not scaled_mask else 2
         self.update_freq = update_freq
+        self.start_time = time.time()
 
     def _log(self, input_batch, target_batch, step):
 
@@ -28,7 +72,8 @@ class PredictionCallback(tf.keras.callbacks.Callback):
         batch_size = input_batch.shape[0]
 
         # predict
-        pred_batch = self._model.predict_on_batch(input_batch).numpy()
+        pred_batch = self._model.predict_on_batch(input_batch)
+        pred_batch = _get_numpy(pred_batch)
 
         with self.summary_writer.as_default():
 
@@ -72,26 +117,39 @@ class PredictionCallback(tf.keras.callbacks.Callback):
 
             # scale
             target_batch = (target_batch * 255. / (self.num_classes - 1)).astype(np.uint8)
-            pred_batch = (pred_batch * 255. / (self.num_classes - 1)).astype(np.uint8)
-
             add_images('targets', target_batch)
             add_images('predictions', pred_batch)
 
 
+def _get_numpy(tensor):
+    try:
+        return tensor.numpy()
+    except:
+        return tensor
+
+
 class EpochPredictionCallback(PredictionCallback):
 
+    def on_epoch_begin(self, epoch, logs={}):
+        self.epoch_start_time = time.time()
+
     def on_epoch_end(self, epoch, logs={}):
+        et = time.time()
 
         if epoch == -1:
             epoch = 0
         else:
             epoch = epoch + 1
 
+            # log time for performance tests
+            logger.info("time per epoch: %s, avg time per epoch: %s" %
+                        (get_time_diff_str(self.epoch_start_time, et), get_time_diff_str(self.start_time, et, period=epoch)))
+
         if epoch % self.update_freq == 0:
             logger.debug("logging images to tensorboard, epoch=%d" % epoch)
 
             for input_batch, target_batch in self.generator:
-                self._log(input_batch.numpy(), target_batch.numpy(), epoch)
+                self._log(_get_numpy(input_batch), _get_numpy(target_batch), epoch)
                 break
 
 
@@ -107,7 +165,7 @@ class BatchPredictionCallback(PredictionCallback):
             logger.info("logging images to tensorboard, batch=%d" % self._batch)
 
             for input_batch, target_batch in self.generator:
-                self._log(input_batch.numpy(), target_batch.numpy(), self._batch)
+                self._log(_get_numpy(input_batch), _get_numpy(target_batch), self._batch)
                 break
 
 

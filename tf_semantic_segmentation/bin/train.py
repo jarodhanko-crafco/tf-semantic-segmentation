@@ -60,8 +60,11 @@ def get_args(args=None):
     parser.add_argument('-lr', '--learning_rate', default=1e-4, type=float, help='learning rate')
     parser.add_argument('-logdir', '--logdir', default=None, help='log dir (where the tensorboard log files and saved models go)')
     parser.add_argument('-delete', '--delete_logdir', action='store_true', help='if logdir exist and --delete_logdir, delete everything in it')
+    parser.add_argument('-no_eval', '--no_evaluate', action='store_true', help='evaluates after training completes on the validation set')
 
     parser.add_argument('-e', '--epochs', default=10, type=int, help='number of epochs')
+    parser.add_argument('-ti', '--time_it', default=False, action='store_true', help='adds timing callback to measure images/sec and sec/batch')
+    parser.add_argument('-ti_freq', '--time_it_log_freq', default=50, type=int, help='(info) log after x batches')
     parser.add_argument('-bufsize', '--buffer_size', default=50, type=int, help='number of examples to prefetch for training')
     parser.add_argument('-valbufsize', '--val_buffer_size', default=25, type=int, help='number of examples to prefetch for validation')
     parser.add_argument('-valfreq', '--validation_freq', default=1, type=int, help='validate every x epochs')
@@ -176,7 +179,7 @@ def train_test_model(args, hparams=None, reporter=None):
     # setting up wandb
     if args.wandb_project:
         import wandb
-        wandb_run = wandb.init(project=args.wandb_project, config=args, name=args.wandb_name, sync_tensorboard=True)
+        wandb_run = wandb.init(project=args.wandb_project, config=args, name=args.wandb_name, sync_tensorboard=True, reinit=True)
         callbacks.append(wandb.keras.WandbCallback())
 
         if args.logdir is None:
@@ -250,12 +253,15 @@ def train_test_model(args, hparams=None, reporter=None):
     assert(args.record_dir is not None or args.dataset is not None or args.record_tag is not None or args.directory is not None)
 
     logger.info("setting up dataset")
+    ds = None  # will be used when in dataset mode
+
     if args.dataset or args.directory:
         if args.dataset and type(args.dataset) == str:
             cache_dir = get_cache_dir(args.data_dir, args.dataset)
             ds = get_dataset_by_name(args.dataset, cache_dir)
         elif args.dataset:
             ds = args.dataset
+            cache_dir = get_cache_dir(args.data_dir, args.dataset.__class__.__name__)
         else:
             ds = DirectoryDataset(args.directory)
             cache_dir = args.directory
@@ -264,6 +270,7 @@ def train_test_model(args, hparams=None, reporter=None):
         logger.info("using dataset %s with %d classes" % (ds.__class__.__name__, ds.num_classes))
 
         if not args.train_on_generator:
+
             logger.info("writing records")
 
             record_dir = os.path.join(cache_dir, 'records')
@@ -272,11 +279,14 @@ def train_test_model(args, hparams=None, reporter=None):
             writer = TFWriter(record_dir, options=args.record_options)
             writer.write(ds)
             writer.validate(ds)
+        else:
+            record_dir = None
 
         num_classes = ds.num_classes
     elif args.record_dir:
         if not os.path.exists(args.record_dir):
             raise Exception("cannot find record dir %s" % args.record_dir)
+
         record_dir = args.record_dir
         num_classes = TFReader(record_dir, options=args.record_options).num_classes
     elif args.record_tag:
@@ -284,6 +294,8 @@ def train_test_model(args, hparams=None, reporter=None):
         record_dir = os.path.join(args.data_dir, 'downloaded', record_tag)
         download_records(record_tag, record_dir)
         num_classes = TFReader(record_dir, options=args.record_options).num_classes
+    else:
+        raise Exception("cannot find either dataset/directory/record_dir or record_tag")
 
     if args.size and args.color_mode != ColorMode.NONE:
         input_shape = (args.size[0], args.size[1], 3 if args.color_mode == ColorMode.RGB else 1)
@@ -291,15 +303,24 @@ def train_test_model(args, hparams=None, reporter=None):
     elif args.train_on_generator:
         raise Exception("please specify the 'size' and 'color_mode' argument when training using the generator")
     else:
+        if record_dir is None:
+            raise Exception("record_dir cannot be None when trying to read record files")
+
         input_shape = TFReader(record_dir, options=args.record_options).input_shape
         input_shape = (input_shape[0], input_shape[1], 3 if args.color_mode == ColorMode.RGB else 1)
 
     logger.info("input shape: %s" % str(input_shape))
 
-    if args.mixed_float16:
-        logger.info("using mixed float16 precision, tf version >= 2.1 required")
-        policy = tf.keras.mixed_precision.experimental.Policy('mixed_float16')
-        tf.keras.mixed_precision.experimental.set_policy(policy)
+    try:
+        if args.mixed_float16:
+            logger.info("using mixed float16 precision, tf version >= 2.1 required")
+            policy = tf.keras.mixed_precision.experimental.Policy('mixed_float16')
+            tf.keras.mixed_precision.experimental.set_policy(policy)
+        else:
+            tf.keras.mixed_precision.experimental.set_policy(None)
+
+    except Exception as e:
+        logger.error("cannot set mixed precision policy, exception: %s" % str(e))
 
     # set scale mask based on sigmoid activation
     scale_mask = args.final_activation == 'sigmoid'
@@ -360,8 +381,11 @@ def train_test_model(args, hparams=None, reporter=None):
         model.summary()
 
     if args.train_on_generator:
+        if ds is None:
+            raise Exception("Dataset cannot be None when training with generator")
         train_ds = convert2tfdataset(ds, DataType.TRAIN)
         val_ds = convert2tfdataset(ds, DataType.VAL)
+        reader = None  # no tfrecord reader
     else:
         logger.info("using tfreader to read record dir %s" % record_dir)
         reader = TFReader(record_dir, options=args.record_options)
@@ -414,7 +438,7 @@ def train_test_model(args, hparams=None, reporter=None):
             test_ds_images = convert2tfdataset(ds, DataType.TEST) if args.train_on_generator else reader.get_dataset(DataType.TEST)
             test_ds_images = test_ds_images.map(val_preprocess_fn, num_parallel_calls=1)
             test_ds_images = preprocessing_ds.prepare_dataset(test_ds_images, args.num_tensorboard_images, buffer_size=1, shuffle=False, prefetch=False, take=args.num_tensorboard_images)
-            test_prediction_callback = custom_callbacks.EpochPredictionCallback(model, os.path.join(args.logdir, 'test'), val_ds_images,
+            test_prediction_callback = custom_callbacks.EpochPredictionCallback(model, os.path.join(args.logdir, 'test'), test_ds_images,
                                                                                 scaled_mask=scale_mask,
                                                                                 binary_threshold=args.binary_threshold,
                                                                                 update_freq=args.tensorboard_images_freq)
@@ -432,6 +456,10 @@ def train_test_model(args, hparams=None, reporter=None):
         logger.warning("Reading total number of input samples, cause no steps were specifed. This may take a while.")
         steps_per_epoch = reader.num_examples(DataType.TRAIN) // global_batch_size
 
+    # add timing callback after steps per epoch is known
+    if args.time_it:
+        callbacks.append(custom_callbacks.TimingCallback(args.batch_size, steps_per_epoch * global_batch_size, log_interval=args.time_it_log_freq))
+
     if args.validation_steps != -1:
         validation_steps = args.validation_steps
     elif args.train_on_generator:
@@ -440,22 +468,25 @@ def train_test_model(args, hparams=None, reporter=None):
         logger.warning("Reading total number of input val samples, cause no val_steps were specifed. This may take a while.")
         validation_steps = reader.num_examples(DataType.VAL) // global_batch_size
 
-    model.fit(train_ds, steps_per_epoch=steps_per_epoch, validation_data=val_ds, validation_steps=validation_steps,
-              callbacks=callbacks, epochs=args.epochs, validation_freq=args.validation_freq)
+    history = model.fit(train_ds, steps_per_epoch=steps_per_epoch, validation_data=val_ds, validation_steps=validation_steps,
+                        callbacks=callbacks, epochs=args.epochs, validation_freq=args.validation_freq)
 
-    results = model.evaluate(val_ds, steps=validation_steps)
+    if not args.no_evaluate:
+        results = model.evaluate(val_ds, steps=validation_steps)
+    else:
+        results = None
 
     # saved model export
     saved_model_path = os.path.join(args.logdir, 'saved_model', str(args.saved_model_version))
 
-    if os.path.exists(saved_model_path):
+    if os.path.exists(saved_model_path) and not args.no_export_saved_model:
         shutil.rmtree(saved_model_path)
 
     if not args.no_export_saved_model:
         logger.info("exporting saved model to %s" % saved_model_path)
         model.save(saved_model_path, save_format='tf')
 
-    return results, model
+    return {"evaluate": results, "history": history}, model
 
 
 def main():
