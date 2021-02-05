@@ -96,7 +96,7 @@ def main():
         image = imageio.imread(args.image)
         image = image.astype(np.float32) / 255.
         # prepare image
-        image, _ = pre_dataset.resize_and_change_color(image, None, size, color_mode, resize_method=args.resize_method)
+        #image, _ = pre_dataset.resize_and_change_color(image, None, size, color_mode, resize_method=args.resize_method)
 
         print(image.shape)
         # prepare image
