@@ -85,3 +85,9 @@ experimental/
 records/**
 gt/**
 pets/**
+/virtualenv/bin/*
+/virtualenv
+/tf_semantic_segmentation/predict
+/tf_semantic_segmentation/logdir/train
+/tf_semantic_segmentation/dataset
+/tf_semantic_segmentation/logdir
