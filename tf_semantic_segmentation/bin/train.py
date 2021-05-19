@@ -23,6 +23,46 @@ import shutil
 import ast
 import inspect
 import types
+import logging
+import copy
+import tempfile
+
+
+def find_optimal_batch_size(args, batch_sizes=[pow(2, i) for i in range(16)], steps_per_epoch=-1):
+
+    # reset loglevel to reduce printing
+    current_level = logger.level
+    logger.setLevel(logging.CRITICAL)
+
+    current_bs = 0
+    _args = copy.deepcopy(args)
+
+    # only test with steps and buffer at bare min
+    _args.validation_steps = 1
+    _args.steps_per_epoch = steps_per_epoch
+    _args.epochs = 1
+    _args.buffer_size = 10
+    _args.val_buffer_size = 1
+
+    for batch_size in batch_sizes:
+        print("testing batch size %d on model %s" % (batch_size, _args.model))
+        try:
+            # try to train for 30 seconds
+            _args.batch_size = batch_size
+            _args.log_dir = tempfile.mkdtemp()
+            _ = train_test_model(_args)
+
+            current_bs = batch_size
+            shutil.rmtree(_args.log_dir)
+        except tf.errors.ResourceExhaustedError as re:
+            shutil.rmtree(_args.log_dir)
+            break
+        except tf.errors.InternalError as ie:
+            shutil.rmtree(_args.log_dir)
+            break
+
+    logger.setLevel(current_level)
+    return current_bs
 
 
 def get_args(args=None):
@@ -30,7 +70,13 @@ def get_args(args=None):
     color_modes = [int(cm) for cm in ColorMode]
 
     def str_list_type(x): return list(map(str, x.split(",")))
-    def dict_type(x): return ast.literal_eval(x)
+
+    def dict_type(x):
+        if type(x) == dict:
+            return x
+
+        return ast.literal_eval(x)
+
     def float_list_type(x): return list(map(float, x.split(",")))
     def int_list_type(x): return [] if x.strip() == "" else list(map(int, x.split(",")))
     def tuple_type(x): return tuple(list(map(int, x.split(","))))
@@ -89,6 +135,7 @@ def get_args(args=None):
     parser.add_argument('-rd', '--record_dir', default=None, help='if none, will be auto detected')
     parser.add_argument('-ro', '--record_options', default='GZIP', help='record compression options')
     parser.add_argument('-ds', '--dataset', default=None, choices=list(datasets_by_name.keys()), help='dataset to train on')
+    parser.add_argument('-ds_args', '--dataset_args', default={}, type=dict_type, help='args for the dataset to initialize')
     parser.add_argument('-rtag', '--record_tag', default=None, choices=list(google_drive_records_by_tag.keys()), help='record tag for auto downloading records')
     parser.add_argument('-dir', '--directory', default=None, help='training model on a directory containing images and masks')
     parser.add_argument('-aug', '--augmentations', default=[], type=any_of(preprocessing_ds.augmentation_methods),
@@ -129,16 +176,26 @@ def get_args(args=None):
     parser.add_argument('--tensorboard_val_images', action='store_true', help='show val images in tensorboard/wandb')
     parser.add_argument('--tensorboard_test_images', action='store_true', help='show test images in tensorboard/wandb')
     parser.add_argument('--tensorboard_train_images_update_batch_freq', type=int, default=-1, help='show train images every n batch images in tensorboard/wandb. If -1, no images will be logged')
-    parser.add_argument('-num_tb_imgs', '--num_tensorboard_images', type=int, default=2, help='number of images displayed in tensorboard')
-    parser.add_argument('-tb_images_freq', '--tensorboard_images_freq', type=int, default=1, help='after every $ epoch, log images')
+    parser.add_argument('-num_tb_imgs', '--num_tensorboard_images', type=int, default=3, help='number of images displayed in tensorboard')
+    parser.add_argument('-tb_images_freq', '--tensorboard_images_freq', type=int, default=1, help='after every $ epoch, log images [only used for test/val]')
     parser.add_argument('-binary_thresh', '--binary_threshold', type=float, default=0.5, help='values above threshold are rounded to 1.0, below to 0.0')
     parser.add_argument('-tb_uf', '--tensorboard_update_freq', default='batch', type=str, choices=['batch', 'epoch'], help='update frequency [batch or epoch] of tensorboard')
+    parser.add_argument("--save_val_images", action='store_true', help='saves val images to logdir/val/samples')
+    parser.add_argument("--save_train_images", action='store_true', help='saves val images to logdir/train/samples')
+    parser.add_argument("--save_test_images", action='store_true', help='saves val images to logdir/test/samples')
 
     # early stopping
     parser.add_argument('--no_early_stopping', action='store_true', help='if specified, do not add callback for early stopping')
     parser.add_argument('-es_patience', '--early_stopping_patience', default=20, type=int, help='early stopping patience [epochs]')
     parser.add_argument('-es_mode', '--early_stopping_mode', default='min', type=str, help='early stopping mode')
     parser.add_argument('-es_monitor', '--early_stopping_monitor', default='val_loss', type=str, help='early stopping monitor metric/loss')
+
+    # lr finder
+    parser.add_argument('--find_lr', action='store_true', help='if specified, the learning rate finder runs')
+    parser.add_argument('-fminlr', "--find_lr_min_lr", default=1e-9, type=float, help='minimum lr used to find the learning rate')
+    parser.add_argument('-fmaxlr', "--find_lr_max_lr", default=1e-1, type=float, help='maxium lr used to find the learning rate')
+    parser.add_argument('-fbeta', "--find_lr_beta", default=1e-1, type=float, help='beta used for changing the lr during lr find')
+    parser.add_argument('-fstop', "--find_lr_stop_factor", default=4.0, type=float, help='beta used for changing the lr during lr find')
 
     # reduce lr on plateau
     parser.add_argument('--reduce_lr_on_plateau', action='store_true', help='if specified, do not add callback for reducing lr on plateau')
@@ -148,6 +205,15 @@ def get_args(args=None):
     parser.add_argument('-lr_min_lr', '--reduce_lr_min_lr', default=1e-7, type=float, help='minimum learning rate when using reduce_lr_on_plateau')
     parser.add_argument('-lr_min_delta', '--reduce_lr_min_delta', default=0.0001, type=float, help='reduce lr min delta')
     parser.add_argument('-lr_monitor', '--reduce_lr_monitor', default='val_loss', type=str, help='reduce lr monitor')
+
+    # mlflow
+    parser.add_argument('-flow', '--mlflow', action='store_true', help='enable mlflow auto logging')
+    parser.add_argument('-flow_exp', '--mlflow_experiment', help='mlflow experiment name, will create the experiment if it does not exist and ignored if mlflow_experiment_id is specified')
+    parser.add_argument("-flow_exp_id", "--mlflow_experiment_id", help='id to the mlflow experiment', default=None)
+    parser.add_argument("-flow_name", "--mlflow_run_name", help='name of the current run', default=None)
+    parser.add_argument('-flow_trackuri', '--mlflow_tracking_uri', help='tracking uri to the mlflow client', default=None)
+    parser.add_argument('-flow_reguri', '--mlflow_registry_uri', help='registry uri to the mlflow client', default=None)
+    parser.add_argument("--no_flow_log_images", action='store_true', help='do not log images when tensorboard is enabled')
 
     args = parser.parse_args(args=args)
 
@@ -258,7 +324,7 @@ def train_test_model(args, hparams=None, reporter=None):
     if args.dataset or args.directory:
         if args.dataset and type(args.dataset) == str:
             cache_dir = get_cache_dir(args.data_dir, args.dataset)
-            ds = get_dataset_by_name(args.dataset, cache_dir)
+            ds = get_dataset_by_name(args.dataset, cache_dir, args.dataset_args)
         elif args.dataset:
             ds = args.dataset
             cache_dir = get_cache_dir(args.data_dir, args.dataset.__class__.__name__)
@@ -415,10 +481,12 @@ def train_test_model(args, hparams=None, reporter=None):
         if args.tensorboard_train_images_update_batch_freq > 0:
             train_ds_images = convert2tfdataset(ds, DataType.TRAIN) if args.train_on_generator else reader.get_dataset(DataType.TRAIN)
             train_ds_images = train_ds_images.map(val_preprocess_fn, num_parallel_calls=1)
-            train_ds_images = preprocessing_ds.prepare_dataset(train_ds_images, args.num_tensorboard_images, buffer_size=10, shuffle=True, prefetch=False)
+            train_ds_images = preprocessing_ds.prepare_dataset(train_ds_images, args.num_tensorboard_images, buffer_size=100, shuffle=True, prefetch=False)
             train_prediction_callback = custom_callbacks.BatchPredictionCallback(model, os.path.join(args.logdir, 'train'), train_ds_images,
                                                                                  scaled_mask=scale_mask,
                                                                                  binary_threshold=args.binary_threshold,
+                                                                                 save_images=args.save_train_images,
+                                                                                 mlflow_logging=not args.no_flow_log_images and args.mlflow,
                                                                                  update_freq=args.tensorboard_train_images_update_batch_freq)
             callbacks.append(train_prediction_callback)
             train_prediction_callback.on_batch_end(-1, {})
@@ -430,6 +498,8 @@ def train_test_model(args, hparams=None, reporter=None):
             val_prediction_callback = custom_callbacks.EpochPredictionCallback(model, os.path.join(args.logdir, 'validation'), val_ds_images,
                                                                                scaled_mask=scale_mask,
                                                                                binary_threshold=args.binary_threshold,
+                                                                               save_images=args.save_val_images,
+                                                                               mlflow_logging=not args.no_flow_log_images and args.mlflow,
                                                                                update_freq=args.tensorboard_images_freq)
             callbacks.append(val_prediction_callback)
             val_prediction_callback.on_epoch_end(-1, {})
@@ -440,7 +510,9 @@ def train_test_model(args, hparams=None, reporter=None):
             test_ds_images = preprocessing_ds.prepare_dataset(test_ds_images, args.num_tensorboard_images, buffer_size=1, shuffle=False, prefetch=False, take=args.num_tensorboard_images)
             test_prediction_callback = custom_callbacks.EpochPredictionCallback(model, os.path.join(args.logdir, 'test'), test_ds_images,
                                                                                 scaled_mask=scale_mask,
+                                                                                save_images=args.save_test_images,
                                                                                 binary_threshold=args.binary_threshold,
+                                                                                mlflow_logging=not args.no_flow_log_images and args.mlflow,
                                                                                 update_freq=args.tensorboard_images_freq)
             callbacks.append(test_prediction_callback)
             test_prediction_callback.on_epoch_end(-1, {})
@@ -460,6 +532,12 @@ def train_test_model(args, hparams=None, reporter=None):
     if args.time_it:
         callbacks.append(custom_callbacks.TimingCallback(args.batch_size, steps_per_epoch * global_batch_size, log_interval=args.time_it_log_freq))
 
+    if args.find_lr:
+        find_lr_logdir = os.path.join(args.logdir, 'lr-finder')
+        callbacks.append(custom_callbacks.LRFinder(
+            model, steps_per_epoch, find_lr_logdir, args.epochs, args.find_lr_min_lr, args.find_lr_max_lr, args.find_lr_stop_factor, args.find_lr_beta
+        ))
+
     if args.validation_steps != -1:
         validation_steps = args.validation_steps
     elif args.train_on_generator:
@@ -468,6 +546,42 @@ def train_test_model(args, hparams=None, reporter=None):
         logger.warning("Reading total number of input val samples, cause no val_steps were specifed. This may take a while.")
         validation_steps = reader.num_examples(DataType.VAL) // global_batch_size
 
+    if args.mlflow:
+
+        import mlflow
+        from mlflow.exceptions import MlflowException
+
+        if args.mlflow_experiment_id:
+            experiment_id = args.mlflow_experiment_id
+
+        if args.mlflow_tracking_uri:
+            mlflow.set_tracking_uri(args.mlflow_tracking_uri)
+        if args.mlflow_registry_uri:
+            mlflow.set_registry_uri(args.mlflow_registry_uri)
+
+        elif args.mlflow_experiment:
+            try:
+                logger.debug(f"try creating mlflow experiment {args.mlflow_experiment}")
+                experiment_id = mlflow.create_experiment(args.mlflow_experiment)
+                experiment = mlflow.get_experiment(experiment_id)
+                logger.debug(f"created lflow experiment with id {experiment_id}")
+
+            except MlflowException:
+                experiment = mlflow.get_experiment_by_name(args.mlflow_experiment)
+                experiment_id = experiment.experiment_id
+                logger.debug(f"using existing mlflow experiment with id={experiment_id}")
+        else:
+            experiment_id = None
+
+        tags = {k: str(v) for k, v in vars(args).items()}
+
+        if experiment_id or args.mlflow_run_name:
+            run = mlflow.start_run(experiment_id=experiment_id, run_name=args.mlflow_run_name, tags=tags)
+            logger.info("mlflow run id=%s" % (run.info.run_id))
+        mlflow.log_image
+        mlflow.tensorflow.autolog()
+
+    # model fitting
     history = model.fit(train_ds, steps_per_epoch=steps_per_epoch, validation_data=val_ds, validation_steps=validation_steps,
                         callbacks=callbacks, epochs=args.epochs, validation_freq=args.validation_freq)
 
@@ -486,7 +600,7 @@ def train_test_model(args, hparams=None, reporter=None):
         logger.info("exporting saved model to %s" % saved_model_path)
         model.save(saved_model_path, save_format='tf')
 
-    return {"evaluate": results, "history": history}, model
+    return {"evaluate": results, "history": history, 'callbacks': callbacks}, model
 
 
 def main():

@@ -3,13 +3,14 @@
 [![Build Status](https://travis-ci.org/baudcode/tf-semantic-segmentation.svg?branch=master)](https://travis-ci.org/baudcode/tf-semantic-segmentation)
 [![PyPI Status Badge](https://badge.fury.io/py/tf-semantic-segmentation.svg)](https://pypi.org/project/tf-semantic-segmentation/)
 [![codecov](https://codecov.io/gh/baudcode/tf-semantic-segmentation/branch/dev/graph/badge.svg)](https://codecov.io/gh/baudcode/tf-semantic-segmentation)
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1xBH4WxhJ7TlnC7pck7ifLjo3NrdYmug-)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/baudcode/tf-semantic-segmentation/blob/master/examples/Demo.ipynb)
 [![Documentation Status](https://readthedocs.org/projects/ansicolortags/badge/?version=latest)](http://tf-semantic-segmentation.readthedocs.io/?badge=latest)
 
 ### Quick Start
-See [GETTING_STARTED](#getting-started), or the [Colab Notebook](https://colab.research.google.com/drive/1xBH4WxhJ7TlnC7pck7ifLjo3NrdYmug-).
+See [GETTING_STARTED](#getting-started), or the [Colab Notebook](https://colab.research.google.com/github/baudcode/tf-semantic-segmentation/blob/master/examples/Demo.ipynb).
 
 Learn more at our [documentation](https://tf-semantic-segmentation.readthedocs.io/en/latest/).
+See upcoming features on our [roadmap](ROADMAP.md).
 
 ## Features
 
@@ -39,13 +40,14 @@ Learn more at our [documentation](https://tf-semantic-segmentation.readthedocs.i
 
 #### Models
 
-  - [U2Net / U2NetP](https://arxiv.org/abs/2005.09007)
+  
   - [Unet](https://arxiv.org/abs/1505.04597)
-  - [PSP](https://arxiv.org/abs/1612.01105)
-  - [FCN](https://arxiv.org/abs/1411.4038)
   - [Erfnet](https://arxiv.org/abs/1806.08522)
   - [MultiResUnet](https://arxiv.org/abs/1902.04049)
-  - [NestedUnet (Unet++)](https://arxiv.org/abs/1807.10165)
+  - [PSP](https://arxiv.org/abs/1612.01105) (experimental)
+  - [FCN](https://arxiv.org/abs/1411.4038) (experimental)
+  - [NestedUnet (Unet++)](https://arxiv.org/abs/1807.10165) (experimental)
+  - [U2Net / U2NetP](https://arxiv.org/abs/2005.09007) (experimental)
   - SatelliteUnet
   - MobilenetUnet (unet with mobilenet encoder pre-trained on imagenet)
   - InceptionResnetV2Unet (unet with inception-resnet v2 encoder pre-trained on imagenet)
@@ -86,7 +88,9 @@ Learn more at our [documentation](https://tf-semantic-segmentation.readthedocs.i
   - rot 180
   - color
 
-## Requirements
+## [Getting Started](#getting-started)
+
+### Requirements
 
 ```shell
 sudo apt-get install libsm6 libxext6 libxrender-dev libyaml-dev libpython3-dev
@@ -99,13 +103,13 @@ pip install tensorflow-gpu==2.4.0 --upgrade
 pip install tensorflow-addons==0.12.0 --upgrade
 ```
 
-## Installation
+### Installation
 
 ```shell
 pip install tf-semantic-segmentation
 ```
 
-## [Getting Started](#getting-started)
+### Run tensorboard
 
 - Hint: To see train/test/val images you have to start tensorboard like this
 
