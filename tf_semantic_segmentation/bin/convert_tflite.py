@@ -1,12 +1,12 @@
 import tensorflow as tf
 import argparse
-from ..settings import logger
+#from ..settings import logger
 
 
 def convert(saved_model_dir, output_path, optimize_for_size=True):
     converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_dir)
     converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_SIZE if optimize_for_size else tf.lite.Optimize.DEFAULT]
-    logger.info('optimizations: %s', str(converter.optimizations))
+    #logger.info('optimizations: %s', str(converter.optimizations))
     tflite_quant_model = converter.convert()
     open(output_path, "wb").write(tflite_quant_model)
 

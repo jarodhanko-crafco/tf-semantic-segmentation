@@ -96,7 +96,7 @@ def main():
         image = imageio.imread(args.image)
         image = image.astype(np.float32) / 255.
         # prepare image
-        image, _ = pre_dataset.resize_and_change_color(image, None, size, color_mode, resize_method=args.resize_method)
+        #image, _ = pre_dataset.resize_and_change_color(image, None, size, color_mode, resize_method=args.resize_method)
 
         print(image.shape)
         # prepare image
@@ -108,15 +108,16 @@ def main():
 
         predictions_rgb = masks.get_colored_segmentation_mask(p,
                                                               num_classes,
-                                                              images=image_batch,
+                                                              images=None,
                                                               binary_threshold=0.5)[0]
 
         show.show_images([predictions_rgb], titles=['predictions on input'])
 
         if args.output_dir:
-            imageio.imwrite(os.path.join(args.output_dir, '%d-input.png' % k), (image_batch[0] * 255.).astype(np.uint8))
-            imageio.imwrite(os.path.join(args.output_dir, '%d-prediction.exr' % k), p[0])
-            imageio.imwrite(os.path.join(args.output_dir, '%d-prediction-rgb.png' % k), predictions_rgb)
+            #imageio.imwrite(os.path.join(args.output_dir, '%d-input.png' % 0), (image_batch[0] * 255.).astype(np.uint8))
+            # print(p[0].shape)
+            # imageio.imwrite(os.path.join(args.output_dir, '%d-prediction.exr' % 0), p[0])
+            imageio.imwrite(os.path.join(args.output_dir, '%s.png' % args.model_path.split('\\')[-1].split('.')[0]), predictions_rgb)
     elif args.video:
         output_path = None if not args.output_dir else os.path.join(args.output_dir, "p-%s" % os.path.basename(args.video))
         logger.info("saving predictions to %s" % output_path)

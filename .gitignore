@@ -85,3 +85,12 @@ experimental/
 records/**
 gt/**
 pets/**
+
+tf_semantic_segmentation/dataset
+tf_semantic_segmentation/predict
+tf_semantic_segmentation/predictions
+tf_semantic_segmentation/datasets
+tf_semantic_segmentation/logdir
+
+*.zip
+*.h5
