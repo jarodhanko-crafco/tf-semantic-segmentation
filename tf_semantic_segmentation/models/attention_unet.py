@@ -18,8 +18,8 @@ def attention(filters, x, g):
     return x * psi
 
 
-def attention_unet(input_shape=(256, 256, 1), num_classes=3, depth=5, activation='relu', num_first_filters=64, l2=None,
-                   upsampling_method='conv', downsampling_method='max_pool', conv_type='conv'):
+def attention_unet(input_shape=(256, 256, 1), num_classes=3, depth=4, activation='relu', num_first_filters=64, l2=None,
+                   upsampling_method='nearest', downsampling_method='max_pool', conv_type='conv'):
     """ 
         https://arxiv.org/pdf/1505.04597.pdf
     """

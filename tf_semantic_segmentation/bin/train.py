@@ -29,21 +29,21 @@ import tempfile
 
 
 def find_optimal_batch_size(args, batch_sizes=[pow(2, i) for i in range(16)], steps_per_epoch=-1):
-    
+
     # reset loglevel to reduce printing
     current_level = logger.level
     logger.setLevel(logging.CRITICAL)
-    
+
     current_bs = 0
     _args = copy.deepcopy(args)
-    
+
     # only test with steps and buffer at bare min
     _args.validation_steps = 1
     _args.steps_per_epoch = steps_per_epoch
     _args.epochs = 1
     _args.buffer_size = 10
     _args.val_buffer_size = 1
-    
+
     for batch_size in batch_sizes:
         print("testing batch size %d on model %s" % (batch_size, _args.model))
         try:
@@ -51,7 +51,7 @@ def find_optimal_batch_size(args, batch_sizes=[pow(2, i) for i in range(16)], st
             _args.batch_size = batch_size
             _args.log_dir = tempfile.mkdtemp()
             _ = train_test_model(_args)
-            
+
             current_bs = batch_size
             shutil.rmtree(_args.log_dir)
         except tf.errors.ResourceExhaustedError as re:
@@ -60,7 +60,7 @@ def find_optimal_batch_size(args, batch_sizes=[pow(2, i) for i in range(16)], st
         except tf.errors.InternalError as ie:
             shutil.rmtree(_args.log_dir)
             break
-    
+
     logger.setLevel(current_level)
     return current_bs
 
@@ -70,6 +70,7 @@ def get_args(args=None):
     color_modes = [int(cm) for cm in ColorMode]
 
     def str_list_type(x): return list(map(str, x.split(",")))
+
     def dict_type(x):
         if type(x) == dict:
             return x
@@ -102,7 +103,7 @@ def get_args(args=None):
     parser.add_argument('-lm', '--metrics', default=['iou_score', 'f1_score', 'categorical_accuracy'],
                         type=any_of(metrics_by_name.keys()),
                         help='metrics, choices: %s' % (list(metrics_by_name.keys())))
-    parser.add_argument('-lr', '--learning_rate', default=1e-4, type=float, help='learning rate')
+    parser.add_argument('-lr', '--learning_rate', default=1e-5, type=float, help='learning rate')
     parser.add_argument('-logdir', '--logdir', default=None, help='log dir (where the tensorboard log files and saved models go)')
     parser.add_argument('-delete', '--delete_logdir', action='store_true', help='if logdir exist and --delete_logdir, delete everything in it')
     parser.add_argument('-no_eval', '--no_evaluate', action='store_true', help='evaluates after training completes on the validation set')
@@ -195,9 +196,9 @@ def get_args(args=None):
 
     # reduce lr on plateau
     parser.add_argument('--reduce_lr_on_plateau', action='store_true', help='if specified, do not add callback for reducing lr on plateau')
-    parser.add_argument('-lr_patience', '--reduce_lr_patience', default=10, type=int, help='reduce lr on plateau patience in [epochs]')
+    parser.add_argument('-lr_patience', '--reduce_lr_patience', default=50, type=int, help='reduce lr on plateau patience in [epochs]')
     parser.add_argument('-lr_mode', '--reduce_lr_mode', default='min', type=str, help='reduce lr mode')
-    parser.add_argument('-lr_factor', '--reduce_lr_factor', default=0.1, type=float, help='reduce lr factor')
+    parser.add_argument('-lr_factor', '--reduce_lr_factor', default=0.9, type=float, help='reduce lr factor')
     parser.add_argument('-lr_min_lr', '--reduce_lr_min_lr', default=1e-7, type=float, help='minimum learning rate when using reduce_lr_on_plateau')
     parser.add_argument('-lr_min_delta', '--reduce_lr_min_delta', default=0.0001, type=float, help='reduce lr min delta')
     parser.add_argument('-lr_monitor', '--reduce_lr_monitor', default='val_loss', type=str, help='reduce lr monitor')

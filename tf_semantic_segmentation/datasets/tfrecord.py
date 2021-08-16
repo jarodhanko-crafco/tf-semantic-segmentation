@@ -8,6 +8,7 @@ import tqdm
 import multiprocessing
 import numpy as np
 
+
 def _bytes_feature(value):
     """Returns a bytes_list from a string / byte."""
     # If the value is an eager tensor BytesList won't unpack a string from an EagerTensor.
@@ -34,7 +35,7 @@ def serialize_example(image, mask, image_shape, num_classes):
         'num_classes': _int64_feature(num_classes),
         'height': _int64_feature(image_shape[0]),
         'width': _int64_feature(image_shape[1]),
-        'depth': _int64_feature(image_shape[2]),
+        'depth': _int64_feature(image_shape[2]) if len(image_shape) > 2 else _int64_feature(1),
     }
 
     example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
@@ -55,6 +56,7 @@ def read_tfrecord(serialized_example):
     example = tf.io.parse_single_example(serialized_example, feature_description)
 
     image = tf.io.parse_tensor(example['image'], out_type=tf.float32)
+
     image_shape = [example['height'], example['width'], example['depth']]
     image = tf.reshape(image, image_shape)
 
@@ -82,7 +84,7 @@ class TFReader:
 
     def num_examples(self, data_type):
         return sum([1 for _ in self.get_dataset(data_type)])
-    
+
     def num_examples_and_mean(self, data_type):
         examples = 0
         mean = []
@@ -93,7 +95,6 @@ class TFReader:
             mean.append(means)
             examples += 1
         return examples, np.mean(mean, axis=0)
-
 
     @property
     def size(self):

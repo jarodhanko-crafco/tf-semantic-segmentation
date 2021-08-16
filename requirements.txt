@@ -5,6 +5,6 @@ wandb
 tqdm
 scipy
 xmltodict
-pillow
+pillow==8.2.0
 pytz
 pyyaml

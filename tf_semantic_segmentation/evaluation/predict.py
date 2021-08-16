@@ -1,3 +1,5 @@
+from genericpath import isfile
+import io
 from tensorflow.keras.models import load_model
 from .. import optimizers
 import argparse
@@ -13,6 +15,7 @@ from ..processing import dataset as pre_dataset
 from ..settings import logger
 from .video import predict_video
 
+import glob
 """
 python -m tf_semantic_segmentation.eval.predict -i "/hdd/datasets/sun/SUNRGBD/kv2/kinect2data/000010_2014-05-26_14-32-36_260595134347_rgbf000020-resize/image/0000020.jpg" -m logs/model-best.h5
 """
@@ -26,6 +29,7 @@ def get_args():
     parser.add_argument('-v', '--video', help='video file', default=None)
     parser.add_argument('-r', '--record_dir', help='record dir', default=None)
     parser.add_argument('-o', '--output_dir', help='export predictions', default=None)
+    parser.add_argument('-id', '--image_dir', help='image directory', default=None)
     parser.add_argument('-ns', '--no_stream', help='show predictions as continous stream of images using opencv', action='store_true')
     parser.add_argument('-rdt', '--record_data_type', help='data type (train, test, val)', default=DataType.VAL,
                         choices=[DataType.TRAIN, DataType.TEST, DataType.VAL])
@@ -42,7 +46,7 @@ def main():
         pass
 
     args = get_args()
-    if args.record_dir is None and args.image is None and args.video is None:
+    if args.record_dir is None and args.image is None and args.video is None and args.image_dir is None:
         raise AssertionError("Please either specify an `image`, `video` or a `record_dir`")
 
     if args.output_dir:
@@ -91,7 +95,41 @@ def main():
                 imageio.imwrite(os.path.join(args.output_dir, '%d-input.png' % k), (image_batch[0] * 255.).astype(np.uint8))
                 imageio.imwrite(os.path.join(args.output_dir, '%d-prediction.exr' % k), p[0])
                 imageio.imwrite(os.path.join(args.output_dir, '%d-prediction-rgb.png' % k), predictions_rgb)
+    elif args.image_dir:
+        print('found image dir', args.image_dir)
+        if os.path.isdir(args.image_dir):
+            globs = glob.glob(f'{args.image_dir}/*')
+            for path in [g for g in globs if os.path.isfile(g)]:
+                try:
+                    image = imageio.imread(path)
+                    image = image.astype(np.float32) / 255.
+                    name, ext = os.path.splitext(os.path.basename(path))
+                    # prepare image
+                    #image, _ = pre_dataset.resize_and_change_color(image, None, size, color_mode, resize_method=args.resize_method)
 
+                    # prepare image
+                    image_batch = np.expand_dims(image, axis=0)
+
+                    p = model.predict_on_batch(image_batch)
+                    num_classes = p.shape[-1] if p.shape[-1] > 1 else 2
+                    logger.info("model has %d classes" % num_classes)
+
+                    predictions_rgb = masks.get_colored_segmentation_mask(p,
+                                                                          num_classes,
+                                                                          images=None,
+                                                                          binary_threshold=0.5)[0]
+
+                    #show.show_images([predictions_rgb], titles=['predictions on input'])
+
+                    if args.output_dir:
+                        imageio.imwrite(os.path.join(args.output_dir, f'{name}-input.png'), (image_batch[0] * 255.).astype(np.uint8))
+                        imageio.imwrite(os.path.join(args.output_dir, f'{name}-prediction.png'), predictions_rgb)
+                    del image
+                    del image_batch
+                    del p
+                    del predictions_rgb
+                except Exception as ex:
+                    print(f'failed prediction on {path}', ex)
     elif args.image:
         image = imageio.imread(args.image)
         image = image.astype(np.float32) / 255.
@@ -111,12 +149,16 @@ def main():
                                                               images=None,
                                                               binary_threshold=0.5)[0]
 
+        print(np.unique(predictions_rgb))
+
         show.show_images([predictions_rgb], titles=['predictions on input'])
 
         if args.output_dir:
-            #imageio.imwrite(os.path.join(args.output_dir, '%d-input.png' % 0), (image_batch[0] * 255.).astype(np.uint8))
+            imageio.imwrite(os.path.join(args.output_dir, '%d-input.png' % 0), (image_batch[0] * 255.).astype(np.uint8))
             # print(p[0].shape)
-            # imageio.imwrite(os.path.join(args.output_dir, '%d-prediction.exr' % 0), p[0])
+            #imageio.imwrite(os.path.join(args.output_dir, '%d-prediction.png' % 0), p[0])
+            #print(p)
+            print(np.max(p[:, :, :, 0]), np.max(p[:, :, :, 1]))
             imageio.imwrite(os.path.join(args.output_dir, '%s.png' % args.model_path.split('\\')[-1].split('.')[0]), predictions_rgb)
     elif args.video:
         output_path = None if not args.output_dir else os.path.join(args.output_dir, "p-%s" % os.path.basename(args.video))
