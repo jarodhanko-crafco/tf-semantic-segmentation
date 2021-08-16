@@ -86,12 +86,12 @@ def smooth_l1(sigma=3.0):
     return smooth_l1
 
 
-def miou_loss(weights=[0.01, 1.], num_classes=2):
+def miou_loss(weights=[0.05, 1.], num_classes=2):
     if weights is not None:
         assert len(weights) == num_classes
         weights = tf.cast(tf.convert_to_tensor(weights), 'float64')
     else:
-        weights = tf.cast(tf.convert_to_tensor([1.] * num_classes), 'float64')
+        weights = tf.cast(tf.convert_to_tensor([0.05] + [1.] * (num_classes - 1)), 'float64')
 
     def loss(y_true, y_pred):
         y_true = tf.cast(y_true, 'float64')

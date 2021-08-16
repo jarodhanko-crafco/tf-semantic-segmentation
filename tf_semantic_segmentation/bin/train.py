@@ -100,6 +100,7 @@ def get_args(args=None):
     parser.add_argument('-o', '--optimizer', default='adam', choices=optimizer_choices, help='optimizer')
     parser.add_argument('-bs', '--batch_size', default=1, type=int, help='batch size')
     parser.add_argument('-l', '--loss', default='categorical_crossentropy', type=str, choices=list(losses_by_name.keys()), help='loss')
+    parser.add_argument('-lossargs', '--loss_args', default={}, type=dict_type, help='arguments to supply to the model, e.g. miou: {"weights":[0.05, 1.], "num_classes":"2"}')
     parser.add_argument('-lm', '--metrics', default=['iou_score', 'f1_score', 'categorical_accuracy'],
                         type=any_of(metrics_by_name.keys()),
                         help='metrics, choices: %s' % (list(metrics_by_name.keys())))
@@ -422,7 +423,8 @@ def train_test_model(args, hparams=None, reporter=None):
         logger.info("input shape: %s" % model.input.shape)
 
         # loss and metrics
-        loss = get_loss_by_name(args.loss)
+        print('loss_args', args.loss_args)
+        loss = get_loss_by_name(args.loss, args.loss_args)
         metrics = [get_metric_by_name(name) for name in args.metrics]
 
         logger.info("metrics: %s" % str(metrics))

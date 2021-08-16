@@ -10,32 +10,32 @@ from .combined import categorical_crossentropy_ssim_loss, binary_crossentropy_ss
 from .lovasz import binary_lovasz, categorical_lovasz
 
 losses_by_name = {
-    "categorical_crossentropy": categorical_crossentropy_loss(),
-    "ce_label_smoothing": ce_label_smoothing_loss(smoothing=0.1),
-    "binary_crossentropy": binary_crossentropy_loss(),
-    "categorical_focal": categorical_focal_loss(),
-    "binary_focal": binary_focal_loss(),
-    "ssim": ssim_loss(),
-    "dice": dice_loss(),
-    "tversky": tversky_loss(),
-    "miou": miou_loss(),
+    "categorical_crossentropy": categorical_crossentropy_loss,
+    "ce_label_smoothing": ce_label_smoothing_loss,  # (smoothing=0.1),
+    "binary_crossentropy": binary_crossentropy_loss,
+    "categorical_focal": categorical_focal_loss,
+    "binary_focal": binary_focal_loss,
+    "ssim": ssim_loss,
+    "dice": dice_loss,
+    "tversky": tversky_loss,
+    "miou": miou_loss,
     # "binary_lovasz": binary_lovasz(),
-    "categorical_lovasz": categorical_lovasz(),
-    "focal_tversky": focal_tversky_loss(),
+    "categorical_lovasz": categorical_lovasz,
+    "focal_tversky": focal_tversky_loss,
     # combined losses
-    "binary_crossentropy_ssim": binary_crossentropy_ssim_loss(),
-    "categorical_crossentropy_ssim": categorical_crossentropy_ssim_loss(),
-    "dice_binary_crossentropy": dice_binary_crossentropy_loss(),
-    "dice_categorical_crossentropy": dice_categorical_crossentropy_loss(),
+    "binary_crossentropy_ssim": binary_crossentropy_ssim_loss,
+    "categorical_crossentropy_ssim": categorical_crossentropy_ssim_loss,
+    "dice_binary_crossentropy": dice_binary_crossentropy_loss,
+    "dice_categorical_crossentropy": dice_categorical_crossentropy_loss,
     "dice_ssim": dice_ssim_loss(),
-    "dice_ssim_binary_crossentropy": dice_ssim_binary_crossentropy_loss(),
-    "dice_ssim_categorical_crossentropy": dice_ssim_categorical_crossentropy_loss(),
+    "dice_ssim_binary_crossentropy": dice_ssim_binary_crossentropy_loss,
+    "dice_ssim_categorical_crossentropy": dice_ssim_categorical_crossentropy_loss,
 }
 
 
-def get_loss_by_name(name):
+def get_loss_by_name(name, loss_args={}):
     if name in losses_by_name:
-        return losses_by_name[name]
+        return losses_by_name[name](**loss_args)
     else:
         raise Exception("cannot find loss %s" % name)
 
