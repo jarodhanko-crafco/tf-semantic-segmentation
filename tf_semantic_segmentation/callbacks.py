@@ -227,8 +227,8 @@ class SavedModelExport(tf.keras.callbacks.Callback):
 
         if current is not None and np.less(current, self.best):
             self.best = current
-            # if os.path.exists(self.saved_model_path):
-            #     shutil.rmtree(self.saved_model_path)
+            if os.path.exists(self.saved_model_path):
+                shutil.rmtree(self.saved_model_path)
 
             if self.verbose:
                 print("[Epoch %d] saving savedmodel to %s" % (epoch, self.saved_model_path))
