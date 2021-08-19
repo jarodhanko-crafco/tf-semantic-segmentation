@@ -8,6 +8,8 @@ import imageio
 import tempfile
 import time
 from tensorflow.keras import backend as K
+import os
+import shutil
 
 
 def get_time_diff_str(start, end, period=1):
@@ -16,6 +18,7 @@ def get_time_diff_str(start, end, period=1):
     m = diff // 60
     h = diff // 3600
     return "%dh %dm %ds" % (h, m, s)
+
 
 class TimingCallback(tf.keras.callbacks.Callback):
     """ Calculates the average time per batch """
@@ -27,7 +30,7 @@ class TimingCallback(tf.keras.callbacks.Callback):
         self.batch_size = batch_size
         self.total = total
         self.log_interval = log_interval
-    
+
     def on_batch_end(self, batch, logs={}):
         self.times.append(time.time() - self.batch_start_time)
 
@@ -36,7 +39,7 @@ class TimingCallback(tf.keras.callbacks.Callback):
             sec_per_batch = np.mean(log_times)
             images_per_sec = (self.batch_size * self.log_interval) / sum(log_times)
             logger.info("[TimingCallback] Batch %d: %.3f s/batch %.1f images/s" % (batch, sec_per_batch, images_per_sec))
-    
+
     def on_epoch_end(self, epoch, logs={}):
         total_time = sum(self.times)
         sec_per_batch = np.mean(self.times)
@@ -48,7 +51,6 @@ class TimingCallback(tf.keras.callbacks.Callback):
 
     def on_batch_begin(self, batch, logs={}):
         self.batch_start_time = time.time()
-    
 
 
 class PredictionCallback(tf.keras.callbacks.Callback):
@@ -128,6 +130,7 @@ class PredictionCallback(tf.keras.callbacks.Callback):
     def logdir_mode(self):
         return self.logdir.split("/")[-1]
 
+
 def _get_numpy(tensor):
     try:
         return tensor.numpy()
@@ -150,7 +153,7 @@ class EpochPredictionCallback(PredictionCallback):
 
             # log time for performance tests
             logger.debug("time per epoch: %s, avg time per epoch: %s" %
-                        (get_time_diff_str(self.epoch_start_time, et), get_time_diff_str(self.start_time, et, period=epoch)))
+                         (get_time_diff_str(self.epoch_start_time, et), get_time_diff_str(self.start_time, et, period=epoch)))
 
         if epoch % self.update_freq == 0:
             logger.info("logging images to tensorboard, epoch=%d, mode=%s" % (epoch, self.logdir_mode))
@@ -206,9 +209,33 @@ class SaveBestWeights(tf.keras.callbacks.Callback):
                 print("[Epoch %d] saving base model weights to %s" % (epoch, self.weights_path))
 
 
+class SavedModelExport(tf.keras.callbacks.Callback):
+    """Export as saved model"""
+
+    def __init__(self, base_model, saved_model_path, monitor='loss', verbose=0):
+        super(SavedModelExport, self).__init__()
+        self.base_model = base_model
+        self.saved_model_path = saved_model_path
+        self.monitor = monitor
+        self.verbose = verbose
+
+    def on_train_begin(self, logs=None):
+        self.best = np.Inf
+
+    def on_epoch_end(self, epoch, logs):
+        current = logs.get(self.monitor)
+
+        if current is not None and np.less(current, self.best):
+            self.best = current
+            # if os.path.exists(self.saved_model_path):
+            #     shutil.rmtree(self.saved_model_path)
+
+            if self.verbose:
+                print("[Epoch %d] saving savedmodel to %s" % (epoch, self.saved_model_path))
+            self.base_model.save(self.saved_model_path, save_format='tf')
+
 
 class LRFinder(tf.keras.callbacks.Callback):
-    
 
     @property
     def logger_str(self):
@@ -226,7 +253,7 @@ class LRFinder(tf.keras.callbacks.Callback):
         self.end_lr = end_lr
         self.sma = sma
         self.reset()
-    
+
     def plot_loss(self, skip_begin=10, skipp_end=1, title="Loss"):
         import matplotlib.pyplot as plt
 
@@ -257,7 +284,7 @@ class LRFinder(tf.keras.callbacks.Callback):
         plt.xscale('log')
         plt.ylim(y_lim)
         plt.show()
-    
+
     def print_best_loss_change_rate(self, sma=10, skip_begin=10, skip_end=5):
         derivatives = self.get_derivatives(sma)[skip_begin:-skip_end]
         derivatives = np.asarray(derivatives)
@@ -268,24 +295,22 @@ class LRFinder(tf.keras.callbacks.Callback):
         logger.info("%s loss changed from %.5f to %.5f" % (self.logger_str, self.losses[min_idxs[0] - sma], self.losses[min_idxs[0]]))
         logger.info("%s lr range [%.6f, %.6f]" % (self.logger_str, lrs[min_idxs[0] - sma], lrs[min_idxs[0]]))
 
-
-    
     def get_derivatives(self, sma):
         assert sma >= 1
         derivatives = [0] * sma
         for i in range(sma, len(self.lrs)):
             derivatives.append((self.losses[i] - self.losses[i - sma]) / sma)
         return derivatives
-    
+
     def reset(self):
         self.lrs = []
         self.losses = []
         self.avg_loss = 0
         self.best_loss = 1e9
         self.num = 0
-        
+
         self.num_updates = self.epochs * self.steps_per_epoch
-        self.lr_mult =  (self.end_lr / self.start_lr) ** (1.0 / self.num_updates)
+        self.lr_mult = (self.end_lr / self.start_lr) ** (1.0 / self.num_updates)
 
         logger.info("%s lr multipier is: %f" % (self.logger_str, self.lr_mult))
         logger.info("%s setting initial lr to %f" % (self.logger_str, self.start_lr))
@@ -293,8 +318,6 @@ class LRFinder(tf.keras.callbacks.Callback):
         K.set_value(self.model.optimizer.lr, self.start_lr)
         with self.summary_writer.as_default():
             tf.summary.scalar('lr-finder/lr', self.start_lr, step=0)
-
-
 
     def on_epoch_end(self, epoch, logs=None):
         self.plot_loss()
@@ -311,14 +334,14 @@ class LRFinder(tf.keras.callbacks.Callback):
         # number of batches processed, compute the average average
         # loss, smooth it, and update the losses list with the
         # smoothed value
-        
+
         l = logs["loss"]
         self.num += 1
-        
+
         # update smoothed average loss
         self.avg_loss = (self.beta * self.avg_loss) + ((1 - self.beta) * l)
         smooth = self.avg_loss / (1 - (self.beta ** self.num))
-        
+
         self.losses.append(smooth)
 
         # compute the maximum loss stopping factor value
@@ -346,8 +369,6 @@ class LRFinder(tf.keras.callbacks.Callback):
             if len(self.losses) >= self.sma:
                 deriv = (self.losses[self.num - 1] - self.losses[self.num - self.sma - 1]) / self.sma
                 tf.summary.scalar('lr-finder/rate-loss-change', deriv, step=self.num)
-
-
 
         logger.info("%s set lr to %.6f" % (self.logger_str, lr))
         K.set_value(self.model.optimizer.lr, lr)

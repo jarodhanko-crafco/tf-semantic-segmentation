@@ -522,6 +522,10 @@ def train_test_model(args, hparams=None, reporter=None):
             model, steps_per_epoch, find_lr_logdir, args.epochs, args.find_lr_min_lr, args.find_lr_max_lr, args.find_lr_stop_factor, args.find_lr_beta
         ))
 
+    if not args.no_export_saved_model:
+        saved_model_path = os.path.join(args.logdir, 'saved_model', str(args.saved_model_version))
+        callbacks.append(custom_callbacks.SavedModelExport(model, saved_model_path))
+
     if args.validation_steps != -1:
         validation_steps = args.validation_steps
     elif args.train_on_generator:
