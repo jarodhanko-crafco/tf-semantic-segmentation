@@ -212,7 +212,7 @@ class SaveBestWeights(tf.keras.callbacks.Callback):
 class SavedModelExport(tf.keras.callbacks.Callback):
     """Export as saved model"""
 
-    def __init__(self, base_model, saved_model_path, monitor='loss', verbose=0):
+    def __init__(self, base_model, saved_model_path, monitor='val_loss', verbose=0):
         super(SavedModelExport, self).__init__()
         self.base_model = base_model
         self.saved_model_path = saved_model_path

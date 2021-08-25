@@ -116,7 +116,7 @@ def main():
 
                     predictions_rgb = masks.get_colored_segmentation_mask(p,
                                                                           num_classes,
-                                                                          images=None,
+                                                                          images=np.array([np.expand_dims(image, axis=-1)]),
                                                                           binary_threshold=0.5)[0]
 
                     #show.show_images([predictions_rgb], titles=['predictions on input'])
