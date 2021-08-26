@@ -35,17 +35,18 @@ def get_args():
                         choices=[DataType.TRAIN, DataType.TEST, DataType.VAL])
     parser.add_argument('-rm', '--resize_method', help='default: resize', type=str, default='resize')
     parser.add_argument('-sm', '--scale_mask', help='scale mask between 0 and 1', action='store_true')
+    parser.add_argument('-po', '--prediction_only', help='ouput prediction mask only', default=False)
     return parser.parse_args()
 
 
-def main():
+def main(args=None):
     try:
         # for exporting in exr format
         imageio.plugins.freeimage.download()
     except Exception:
         pass
 
-    args = get_args()
+    args = args if args != None else get_args()
     if args.record_dir is None and args.image is None and args.video is None and args.image_dir is None:
         raise AssertionError("Please either specify an `image`, `video` or a `record_dir`")
 
@@ -114,20 +115,22 @@ def main():
                     num_classes = p.shape[-1] if p.shape[-1] > 1 else 2
                     logger.info("model has %d classes" % num_classes)
 
+                    if not args.prediction_only:
+                        prediction_images = np.array([np.expand_dims(image, axis=-1)])
+                    else:
+                        prediction_images = None
+
                     predictions_rgb = masks.get_colored_segmentation_mask(p,
                                                                           num_classes,
-                                                                          images=np.array([np.expand_dims(image, axis=-1)]),
+                                                                          images=prediction_images,
                                                                           binary_threshold=0.5)[0]
 
                     #show.show_images([predictions_rgb], titles=['predictions on input'])
 
                     if args.output_dir:
-                        imageio.imwrite(os.path.join(args.output_dir, f'{name}-input.png'), (image_batch[0] * 255.).astype(np.uint8))
+                        if not args.prediction_only:
+                            imageio.imwrite(os.path.join(args.output_dir, f'{name}-input.png'), (image_batch[0] * 255.).astype(np.uint8))
                         imageio.imwrite(os.path.join(args.output_dir, f'{name}-prediction.png'), predictions_rgb)
-                    del image
-                    del image_batch
-                    del p
-                    del predictions_rgb
                 except Exception as ex:
                     print(f'failed prediction on {path}', ex)
     elif args.image:
