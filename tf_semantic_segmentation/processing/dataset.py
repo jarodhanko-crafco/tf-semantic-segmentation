@@ -38,7 +38,7 @@ def resize_and_change_color(image, mask, size, color_mode, resize_method='resize
     elif mode == 'eager':
         if len(image.shape) == 2:
             image = tf.expand_dims(image, axis=-1)
-        
+
         if color_mode == ColorMode.RGB and image.shape[-1] == 1:
             image = tf.image.grayscale_to_rgb(image)
 
@@ -66,10 +66,10 @@ def resize_and_change_color(image, mask, size, color_mode, resize_method='resize
             image = tf.image.resize_with_crop_or_pad(image, size[0], size[1])
             if mask is not None:
                 mask = tf.image.resize_with_crop_or_pad(mask, size[0], size[1])  # use nearest for no interpolation
-        
+
         elif resize_method == 'patch':
             image, mask = select_patch(image, mask, size, color_mode)
-        
+
         else:
             raise Exception("unknown resize method %s" % resize_method)
 
@@ -127,7 +127,7 @@ def select_patch(image, mask, patch_size, color_mode):
         patches = tf.image.random_crop(stack, size=[2, patch_size[0], patch_size[1], 1])
         patch_image = patches[0]
         patch_mask = patches[1]
-    
+
     return (patch_image, patch_mask)
 
 
@@ -149,13 +149,12 @@ def prepare_dataset(dataset, batch_size, buffer_size=200, repeat=0, take=0, skip
         dataset = dataset.repeat(repeat)
     else:
         dataset = dataset.repeat()
-    
+
     # `tf.data.Options()` object then setting `options.experimental_distribute.auto_shard_policy = AutoShardPolicy.DATA`
     if utils.tf_version_gt_eq('2.4'):
         options = tf.data.Options()
         options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
         dataset = dataset.with_options(options)
-
 
     dataset = dataset.batch(batch_size)
 
@@ -187,9 +186,10 @@ def random_flip_ud(**args):
     return args
 
 
+#changed to rotate 90,180,270,360
 def random_rot180(**args):
 
-    angle = tf.random.uniform(shape=[], minval=0, maxval=2, dtype=tf.int32) * 2
+    angle = tf.random.uniform(shape=[], minval=0, maxval=4, dtype=tf.int32)
     for k, x in args.items():
         x = tf.image.rot90(x, angle)
         args[k] = x

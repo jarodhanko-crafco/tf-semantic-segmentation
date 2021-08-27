@@ -8,6 +8,7 @@ from .nested_unet import nested_unet
 from .psp import psp
 from .fcn import fcn
 from .u2net import u2net, u2netp
+from .amazing_segmentation_unet import asunet
 
 from tensorflow.keras.models import Model
 import inspect
@@ -26,6 +27,7 @@ models_by_name = {
     "fcn": fcn,
     "u2net": u2net,
     "u2netp": u2netp,
+    "asunet": asunet
 }
 
 
@@ -41,5 +43,5 @@ def get_model_by_name(name, args) -> Model:
 
 
 __all__ = ['erfnet', 'unet', 'multires_unet', "unet_mobilenet", "unet_inception_resnet_v2", "unet_resnet", "satellite_unet",
-           "attention_unet", "nested_unet",
+           "attention_unet", "nested_unet", "asunet"
            'get_model_by_name', 'models_by_name']
