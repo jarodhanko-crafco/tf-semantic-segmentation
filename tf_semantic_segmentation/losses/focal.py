@@ -1,6 +1,6 @@
 from tensorflow.keras import backend as K
 import tensorflow as tf
-from .utils import gather_channels
+from .utils import SMOOTH, gather_channels
 
 
 def binary_focal_loss(gamma=2.0, alpha=0.25, **kwargs):
@@ -86,7 +86,7 @@ def smooth_l1(sigma=3.0):
     return smooth_l1
 
 
-def miou_loss(weights=[0.05, 1.], num_classes=2):
+def miou_loss(weights=None, num_classes=2):
     if weights is not None:
         assert len(weights) == num_classes
         weights = tf.cast(tf.convert_to_tensor(weights), 'float64')
@@ -104,8 +104,8 @@ def miou_loss(weights=[0.05, 1.], num_classes=2):
         union = y_pred + y_true - (y_pred * y_true)
         union = K.sum(union, axis=[1, 2])
 
-        numer = (weights * inter)
-        denom = (weights * union + 1e-8)
+        numer = (weights * inter + SMOOTH)
+        denom = (weights * union + SMOOTH)
         iou = numer / denom
         return 1 / K.mean(iou)
 
