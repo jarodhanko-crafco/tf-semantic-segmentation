@@ -78,7 +78,9 @@ def get_colored_segmentation_mask(predictions, num_classes, images=None, binary_
         predictions[predictions <= binary_threshold] = 0.0
     else:
         # find the argmax channel from all channels
-        predictions = np.argmax(predictions, axis=-1)
+        predictions = np.argmax(predictions, axis=-1).astype('uint8')
+        print(np.unique(predictions), str(len(predictions[predictions == 0])), str(len(predictions[predictions == 1])),
+              str(len(predictions[predictions == 2])), str(len(predictions[predictions == 3])))
 
     predictions = predictions.astype(np.uint8)
 

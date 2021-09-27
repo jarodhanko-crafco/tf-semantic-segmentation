@@ -107,6 +107,7 @@ def miou_loss(weights=None, num_classes=2):
         numer = (weights * inter + SMOOTH)
         denom = (weights * union + SMOOTH)
         iou = numer / denom
-        return 1 / K.mean(iou)
+        inverted = 1 / iou
+        return K.mean(inverted)
 
     return loss
