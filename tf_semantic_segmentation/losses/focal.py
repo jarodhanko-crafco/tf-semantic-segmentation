@@ -1,6 +1,6 @@
 from tensorflow.keras import backend as K
 import tensorflow as tf
-from .utils import SMOOTH, gather_channels
+from .utils import SMOOTH, gather_channels, round_if_needed, get_reduce_axes, average
 
 
 def binary_focal_loss(gamma=2.0, alpha=0.25, **kwargs):
@@ -96,18 +96,31 @@ def miou_loss(weights=None, num_classes=2):
     def loss(y_true, y_pred):
         y_true = tf.cast(y_true, 'float64')
         y_pred = tf.cast(y_pred, 'float64')
-        y_pred = K.softmax(y_pred)
+        # y_pred = K.softmax(y_pred)
 
-        inter = y_pred * y_true
-        inter = K.sum(inter, axis=[1, 2])
+        # inter = y_pred * y_true
+        # inter = K.sum(inter, axis=[1, 2])
 
-        union = y_pred + y_true - (y_pred * y_true)
-        union = K.sum(union, axis=[1, 2])
+        # union = y_pred + y_true - (y_pred * y_true)
+        # union = K.sum(union, axis=[1, 2])
 
-        numer = (weights * inter + SMOOTH)
-        denom = (weights * union + SMOOTH)
-        iou = numer / denom
-        inverted = 1 / iou
-        return K.mean(inverted)
+        # numer = (weights * inter + SMOOTH)
+        # denom = (weights * union + SMOOTH)
+        # iou = numer / denom
+        # inverted = 1 / iou
+        # return K.mean(inverted)
+
+        gt, pr = gather_channels(y_true, y_pred, indexes=None)
+        pr = round_if_needed(pr, None)
+        axes = get_reduce_axes(False)
+
+        # score calculation
+        intersection = K.sum(gt * pr, axis=axes)
+        union = K.sum(gt + pr, axis=axes) - intersection
+
+        score = (intersection + SMOOTH) / (union + SMOOTH)
+        score = average(score, False, weights)
+
+        return 1 / score
 
     return loss
