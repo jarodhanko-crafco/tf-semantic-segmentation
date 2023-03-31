@@ -81,6 +81,7 @@ def erfnet(input_shape=(256, 256, 1), num_classes=3, l2=None):
         y = factorized_module(y, dilation=[1, 1], l2=l2)
 
     y = upsample(y, num_classes, l2=l2)
+    y = layers.Activation('linear', dtype='float32')(y) # make sure outputs is in float32
     return Model(inputs=x, outputs=y)
 
 

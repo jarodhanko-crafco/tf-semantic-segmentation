@@ -1,4 +1,4 @@
-from tensorflow.keras import optimizers
+from tensorflow.keras.optimizers import legacy as optimizers
 
 
 def get_optimizer_by_name(name, lr) -> optimizers.Optimizer:

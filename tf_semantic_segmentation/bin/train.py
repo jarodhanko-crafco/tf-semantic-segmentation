@@ -115,7 +115,7 @@ def get_args(args=None):
     parser.add_argument('-bufsize', '--buffer_size', default=50, type=int, help='number of examples to prefetch for training')
     parser.add_argument('-valbufsize', '--val_buffer_size', default=25, type=int, help='number of examples to prefetch for validation')
     parser.add_argument('-valfreq', '--validation_freq', default=1, type=int, help='validate every x epochs')
-    parser.add_argument('-log', '--log_level', default='INFO', type=str, choices=['DEBUG', "NOTSET", "INFO", "WARN", "ERROR", "CRITICAL"], help='log level during training')
+    parser.add_argument('-log', '--log_level', default='DEBUG', type=str, choices=['DEBUG', "NOTSET", "INFO", "WARN", "ERROR", "CRITICAL"], help='log level during training')
     parser.add_argument('-rm', '--resize_method', default='resize', type=str, choices=['resize', 'resize_with_pad', 'resize_with_crop_or_pad'], help='image resize method (when --size is specified)')
     parser.add_argument('-args', '--model_args', default={}, type=dict_type, help='arguments to supply to the model, e.g. unet: {"downsampling_method": "conv"}')
     parser.add_argument('--tpu_strategy', action='store_true', help='use the tpu strategy for training on tpus')
@@ -199,7 +199,7 @@ def get_args(args=None):
     parser.add_argument('--reduce_lr_on_plateau', action='store_true', help='if specified, do not add callback for reducing lr on plateau')
     parser.add_argument('-lr_patience', '--reduce_lr_patience', default=50, type=int, help='reduce lr on plateau patience in [epochs]')
     parser.add_argument('-lr_mode', '--reduce_lr_mode', default='min', type=str, help='reduce lr mode')
-    parser.add_argument('-lr_factor', '--reduce_lr_factor', default=0.9, type=float, help='reduce lr factor')
+    parser.add_argument('-lr_factor', '--reduce_lr_factor', default=0.1, type=float, help='reduce lr factor')
     parser.add_argument('-lr_min_lr', '--reduce_lr_min_lr', default=1e-7, type=float, help='minimum learning rate when using reduce_lr_on_plateau')
     parser.add_argument('-lr_min_delta', '--reduce_lr_min_delta', default=0.0001, type=float, help='reduce lr min delta')
     parser.add_argument('-lr_monitor', '--reduce_lr_monitor', default='val_loss', type=str, help='reduce lr monitor')
@@ -318,7 +318,7 @@ def train_test_model(args, hparams=None, reporter=None):
             ds = args.dataset
             cache_dir = get_cache_dir(args.data_dir, args.dataset.__class__.__name__)
         else:
-            ds = DirectoryDataset(args.directory)
+            ds = DirectoryDataset(args.directory, train_split=0.6)
             cache_dir = args.directory
 
         assert(ds.num_classes > 0), "The dataset must have at least 1 class"
@@ -369,10 +369,10 @@ def train_test_model(args, hparams=None, reporter=None):
     try:
         if args.mixed_float16:
             logger.info("using mixed float16 precision, tf version >= 2.1 required")
-            policy = tf.keras.mixed_precision.experimental.Policy('mixed_float16')
-            tf.keras.mixed_precision.experimental.set_policy(policy)
+            policy = tf.keras.mixed_precision.Policy('mixed_float16')
+            tf.keras.mixed_precision.set_global_policy(policy)
         else:
-            tf.keras.mixed_precision.experimental.set_policy(None)
+            tf.keras.mixed_precision.set_global_policy(None)
 
     except Exception as e:
         logger.error("cannot set mixed precision policy, exception: %s" % str(e))
@@ -431,7 +431,7 @@ def train_test_model(args, hparams=None, reporter=None):
         logger.info("loss: %s" % str(loss))
 
         opt = get_optimizer_by_name(args.optimizer, args.learning_rate)
-        model.compile(optimizer=opt, loss=loss, metrics=metrics)  # metrics=losses
+        model.compile(optimizer=opt, loss=loss, metrics=metrics, weighted_metrics=[])  # metrics=losses
 
     if args.summary:
         model.summary()
@@ -522,9 +522,9 @@ def train_test_model(args, hparams=None, reporter=None):
             model, steps_per_epoch, find_lr_logdir, args.epochs, args.find_lr_min_lr, args.find_lr_max_lr, args.find_lr_stop_factor, args.find_lr_beta
         ))
 
-    if not args.no_export_saved_model:
-        saved_model_path = os.path.join(args.logdir, 'saved_model', str(args.saved_model_version))
-        callbacks.append(custom_callbacks.SavedModelExport(model, saved_model_path))
+    # if not args.no_export_saved_model:
+    #     saved_model_path = os.path.join(args.logdir, 'saved_model', str(args.saved_model_version))
+    #     callbacks.append(custom_callbacks.SavedModelExport(model, saved_model_path))
 
     if args.validation_steps != -1:
         validation_steps = args.validation_steps
@@ -533,7 +533,7 @@ def train_test_model(args, hparams=None, reporter=None):
     else:
         logger.warning("Reading total number of input val samples, cause no val_steps were specifed. This may take a while.")
         validation_steps = reader.num_examples(DataType.VAL) // global_batch_size
-
+    
     history = model.fit(train_ds, steps_per_epoch=steps_per_epoch, validation_data=val_ds, validation_steps=validation_steps,
                         callbacks=callbacks, epochs=args.epochs, validation_freq=args.validation_freq)
 

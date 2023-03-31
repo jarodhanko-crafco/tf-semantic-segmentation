@@ -91,7 +91,7 @@ def miou_loss(weights=None, num_classes=2):
         assert len(weights) == num_classes
         weights = tf.cast(tf.convert_to_tensor(weights), 'float64')
     else:
-        weights = tf.cast(tf.convert_to_tensor([0.05] + [1.] * (num_classes - 1)), 'float64')
+        weights = tf.cast(tf.convert_to_tensor([0.001] + [1.] * (num_classes - 1)), 'float64')
 
     def loss(y_true, y_pred):
         y_true = tf.cast(y_true, 'float64')
@@ -123,4 +123,27 @@ def miou_loss(weights=None, num_classes=2):
 
         return 1 / score
 
+    return loss
+
+
+def weighted_miou_loss(num_classes=2, weights=None, epsilon=1e-6, scale=1e5):
+    if weights is None:
+        weights = [1.0] * num_classes
+    weights = tf.cast(tf.convert_to_tensor(weights), tf.float64)
+
+    def loss(y_true, y_pred):
+
+        y_pred = tf.nn.softmax(y_pred)
+
+        y_true = tf.cast(y_true, tf.float64)
+        y_pred = tf.cast(y_pred, tf.float64)
+
+        axes = get_reduce_axes(False)
+        intersection = tf.reduce_sum(y_true * y_pred, axis=axes)
+        union = tf.reduce_sum(y_true, axis=axes) + tf.reduce_sum(y_pred, axis=axes) - intersection
+        iou = (intersection + epsilon) / (union + epsilon)
+
+        weighted_iou = tf.reduce_sum(iou * weights)
+        weighted_miou_loss = 1.0 - weighted_iou / tf.reduce_sum(weights)
+        return scale * weighted_miou_loss
     return loss

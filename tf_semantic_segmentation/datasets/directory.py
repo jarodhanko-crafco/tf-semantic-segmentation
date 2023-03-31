@@ -9,7 +9,7 @@ import random
 
 class DirectoryDataset(Dataset):
 
-    def __init__(self, directory, rand=0.2, extensions=['png', 'jpg', 'jpeg']):
+    def __init__(self, directory, rand=0.2, extensions=['png', 'jpg', 'jpeg'], train_split=0.8):
         super(DirectoryDataset, self).__init__(directory)
 
         labels_path = os.path.join(directory, 'labels.txt')
@@ -62,7 +62,7 @@ class DirectoryDataset(Dataset):
                 raise Exception("len(images)=%d does not equal len(masks)=%d" % (len(images), len(masks)))
 
             trainset = list(zip(images, masks))
-            self.split = get_split(trainset, rand=lambda: rand)
+            self.split = get_split(trainset, rand=lambda: rand, train_split=train_split)
 
     @property
     def labels(self):

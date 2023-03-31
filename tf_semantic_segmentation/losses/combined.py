@@ -1,6 +1,7 @@
+from .focal import weighted_miou_loss
 from .ssim import ssim_loss
 from .ce import categorical_crossentropy_loss, binary_crossentropy_loss
-from .dice import dice_loss
+from .dice import dice_loss, focal_tversky_loss
 import tensorflow as tf
 
 
@@ -71,3 +72,11 @@ def dice_ssim_categorical_crossentropy_loss(loss_weight_dice=1.0, loss_weight_ce
         return dice * loss_weight_dice + ce * loss_weight_ce + loss_weight_ssim * ssim
 
     return dice_ssim_categorical_crossentropy
+
+def weighted_miou_tversky_loss(loss_weight_miou=1.0, loss_weight_tversky=1.0, num_classes=2, weights=None, beta=0.7, gamma=0.75, scale=1):
+    def weighted_miou_tversky(y_true, y_pred):
+        weighted_miou = weighted_miou_loss(weights=weights)(y_true, y_pred)
+        tversky = focal_tversky_loss(num_classes, beta, gamma, scale, weights)(y_true, y_pred)
+        return weighted_miou * loss_weight_miou + tversky * loss_weight_tversky
+
+    return weighted_miou_tversky

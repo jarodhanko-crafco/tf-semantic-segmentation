@@ -52,6 +52,7 @@ def attention_unet(input_shape=(256, 256, 1), num_classes=3, depth=4, activation
         logger.debug("decoder - features: %d, shape: %s" % (num_filters, str(y.shape)))
 
     y = conv(y, num_classes, kernel_size=(1, 1), activation=None, norm=None)
+    y = tf.keras.layers.Activation('linear', dtype='float32')(y) #make sure outputs is in float32
     return Model(inputs, y)
 
 
